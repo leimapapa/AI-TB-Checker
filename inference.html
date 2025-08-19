@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AI Dog Breed Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Custom CSS variables for light and dark mode */
+        :root {
+            --light-bg: #f3f4f6;
+            --light-card-bg: #ffffff;
+            --light-accent-primary: #4f46e5; /* indigo-600 */
+            --light-accent-secondary: #8b5cf6; /* violet-500 */
+            --light-text-color: #1f2937;
+            --light-border-color: #e5e7eb;
+            --light-upload-text: #6b7280; /* gray-500 */
+            --light-message-info-bg: #e0f2fe; /* blue-100 */
+            --light-message-info-color: #2563eb; /* blue-600 */
+            --light-message-info-border: #3b82f6; /* blue-500 */
+            --light-message-error-bg: #fee2e2; /* red-100 */
+            --light-message-error-color: #dc2626; /* red-600 */
+            --light-message-error-border: #ef4444; /* red-500 */
+            --light-message-success-bg: #dcfce7; /* green-100 */
+            --light-message-success-color: #16a34a; /* green-600 */
+            --light-message-success-border: #22c55e; /* green-500 */
+            --light-sidebar-bg: rgba(255, 255, 255, 0.85); /* Partially transparent white */
+            --light-prediction-item-bg: #f9fafb; /* light gray */
+        }
+
+        .dark {
+            --bg: #1f2937; /* Dark gray */
+            --card-bg: #374151; /* Slightly lighter dark gray */
+            --accent-primary: #6366f1; /* Indigo-500, brighter for dark mode */
+            --accent-secondary: #a78bfa; /* Violet-400, brighter for dark mode */
+            --text-color: #d1d5db; /* Light gray for text */
+            --border-color: #4b5563; /* Darker border */
+            --upload-text: #e0e0e0; /* Lighter gray for upload text, changed from #9ca3af */
+            --message-info-bg: #1e3a8a; /* Darker blue */
+            --message-info-color: #93c5fd; /* Lighter blue */
+            --message-info-border: #3b82f6;
+            --message-error-bg: #7f1d1d; /* Darker red */
+            --message-error-color: #fca5a5; /* Lighter red */
+            --message-error-border: #ef4444;
+            --message-success-bg: #166534; /* Darker green */
+            --message-success-color: #a7f3d0; /* Lighter green */
+            --message-success-border: #22c55e;
+            --sidebar-bg: rgba(55, 65, 81, 0.9); /* Darker, partially transparent */
+            --prediction-item-bg: #4b5563; /* Darker gray for prediction items */
+        }
+
+        /* Fallback for non-dark mode browsers or if dark class is not applied */
+        html:not(.dark) {
+            --bg: var(--light-bg);
+            --card-bg: var(--light-card-bg);
+            --accent-primary: var(--light-accent-primary);
+            --accent-secondary: var(--light-accent-secondary);
+            --text-color: var(--light-text-color);
+            --border-color: var(--light-border-color);
+            --upload-text: var(--light-upload-text);
+            --message-info-bg: var(--light-message-info-bg);
+            --message-info-color: var(--light-message-info-color);
+            --message-info-border: var(--light-message-info-border);
+            --message-error-bg: var(--light-message-error-bg);
+            --message-error-color: var(--light-message-error-color);
+            --message-error-border: var(--light-message-error-border);
+            --message-success-bg: var(--light-message-success-bg);
+            --message-success-color: var(--light-message-success-color);
+            --message-success-border: var(--light-message-success-border);
+            --sidebar-bg: var(--light-sidebar-bg);
+            --prediction-item-bg: var(--light-prediction-item-bg);
+        }
+
+        /* General styles, using CSS variables */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background-color: var(--bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.5rem;
+            overflow-x: hidden;
+            touch-action: pan-y;
+            transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition for dark mode */
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 960px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-grow: 1;
+            background-color: var(--card-bg);
+            border-radius: 0.75rem; /* Using radius-lg directly */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Using shadow-lg directly */
+            padding: 1rem;
+            position: relative;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        /* Mode Toggle */
+        .toggle-bar {
+            display: flex;
+            width: 100%;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            background-color: var(--border-color);
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); /* Inner shadow for depth */
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            color: var(--text-color);
+            background: transparent;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .toggle-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--accent-primary);
+            border-radius: 0.75rem;
+            z-index: -1;
+            transform: scaleX(0);
+            transition: transform 0.3s ease-in-out;
+            transform-origin: left center;
+        }
+
+        .toggle-btn.active {
+            color: white; /* Active button text is always white */
+        }
+
+        .toggle-btn.active::before {
+            transform: scaleX(1);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* Shadow-md for active button */
+        }
+
+        /* Webcam & Upload Areas */
+        #uploadArea, #webcamArea {
+            width: 100%;
+            min-height: 200px;
+            max-height: 60vh; /* Responsive height for video, increased for mobile */
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 0.75rem;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            color: var(--upload-text);
+            display: flex; /* Ensure content is centered */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: 500;
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent-primary);
+            background-color: rgba(79, 70, 229, 0.05); /* Light hover for both themes */
+        }
+        .dark .upload-area:hover {
+            background-color: rgba(99, 102, 241, 0.1); /* Darker hover for dark theme */
+        }
+
+        .upload-area.dragover {
+            background-color: rgba(79, 70, 229, 0.15);
+            border-color: var(--accent-primary);
+        }
+        .dark .upload-area.dragover {
+            background-color: rgba(99, 102, 241, 0.25);
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        /* Video Container */
+        .video-container {
+            width: 100%;
+            height: 60vh; /* Occupy 60% of viewport height on mobile for camera app feel */
+            /* aspect-ratio: 16 / 9; /* Removed to allow height to dominate */
+            position: relative;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background-color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            touch-action: pinch-zoom;
+        }
+
+        video, #imagePreview {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Fill the container, might crop */
+            transform-origin: center center;
+            transition: transform 0.05s ease-out;
+            border-radius: 0.75rem; /* Ensure image/video respects container radius */
+        }
+
+        /* Overlay Buttons */
+        .button-overlay {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.5); /* Slightly darker overlay for better contrast */
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); /* Stronger shadow for floating effect */
+        }
+
+        .button-overlay:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+            transform: translateY(-2px) scale(1.05); /* Slight lift and scale on hover */
+        }
+
+        #cameraToggleButton {
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 2.8rem; /* Slightly larger */
+            height: 2.8rem;
+            font-size: 1.25rem;
+        }
+
+        #takePhotoButton {
+            bottom: 0.75rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4.5rem; /* Slightly larger */
+            height: 4.5rem;
+            font-size: 1.75rem;
+            background-color: var(--accent-primary); /* Use primary accent color */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+
+        #takePhotoButton.stop-continuous {
+            background-color: #ef4444; /* red-500 */
+        }
+        #takePhotoButton.stop-continuous:hover {
+            background-color: #dc2626; /* red-600 */
+        }
+
+        /* Zoom Slider */
+        .zoom-controls {
+            width: 100%;
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 0.6rem; /* Slightly thicker */
+            background: var(--border-color);
+            border-radius: 0.5rem;
+            outline: none;
+            opacity: 0.8;
+            transition: opacity .2s;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 1.5rem; /* Larger thumb */
+            height: 1.5rem;
+            border-radius: 50%;
+            background: var(--accent-primary);
+            cursor: grab; /* Indicate draggable */
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.4); /* Stronger shadow for thumb */
+            border: 2px solid var(--card-bg); /* Border for thumb */
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+        }
+
+
+        /* Loading & Messages */
+        #loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+            color: var(--text-color);
+        }
+
+        .spinner {
+            width: 32px; /* Larger spinner */
+            height: 32px;
+            border: 4px solid rgba(0, 0, 0, .2); /* Thicker border */
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #messageBox {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+            width: 100%;
+            margin-top: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        #messageBox.error {
+            background-color: var(--message-error-bg);
+            color: var(--message-error-color);
+            border: 1px solid var(--message-error-border);
+        }
+
+        #messageBox.success {
+            background-color: var(--message-success-bg);
+            color: var(--message-success-color);
+            border: 1px solid var(--message-success-border);
+        }
+
+        #messageBox.info {
+            background-color: var(--message-info-bg);
+            color: var(--message-info-color);
+            border: 1px solid var(--message-info-border);
+        }
+
+        /* Predictions Sidebar */
+        #predictionsSidebar {
+            position: fixed;
+            top: 0;
+            right: -100vw; /* Hidden off-screen, full width on mobile */
+            width: 100vw; /* Occupy full width on mobile */
+            max-width: 350px; /* Limit width on larger screens to prevent it from being too wide */
+            height: 100vh;
+            background: var(--sidebar-bg); /* Use CSS variable */
+            backdrop-filter: blur(8px);
+            box-shadow: -4px 0 10px rgba(0, 0, 0, 0.2);
+            transition: right 0.3s ease-in-out;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            color: var(--text-color);
+        }
+
+        #predictionsSidebar.open {
+            right: 0;
+        }
+
+        .predictions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .predictions-header h3 {
+            font-size: 1.4rem; /* Slightly larger heading */
+            font-weight: 700;
+            color: var(--accent-primary); /* Highlight header */
+        }
+
+        .predictions-header button {
+            background: none;
+            border: none;
+            font-size: 1.75rem; /* Larger icon */
+            cursor: pointer;
+            color: var(--text-color); /* Use general text color */
+            padding: 0.25rem;
+            border-radius: 50%;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .predictions-header button:hover {
+            background-color: var(--border-color);
+            color: var(--accent-primary);
+        }
+
+        .predictions-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 5px; /* Add some padding for scrollbar */
+        }
+        /* Custom scrollbar for predictions content */
+        .predictions-content::-webkit-scrollbar {
+            width: 8px;
+        }
+        .predictions-content::-webkit-scrollbar-track {
+            background: var(--border-color);
+            border-radius: 10px;
+        }
+        .predictions-content::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 10px;
+        }
+        .predictions-content::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-secondary);
+        }
+
+
+        .prediction-item {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--prediction-item-bg);
+            margin-bottom: 0.75rem; /* More spacing */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Stronger shadow */
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .prediction-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .prediction-item span:first-child {
+            font-weight: 700; /* Bolder class name */
+            margin-bottom: 0.5rem;
+            color: var(--accent-primary);
+            font-size: 1.1rem;
+        }
+
+        .prediction-details {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .confidence-bar {
+            flex-grow: 1;
+            height: 0.8rem; /* Thicker bar */
+            background: var(--border-color);
+            border-radius: 0.4rem;
+            overflow: hidden;
+            margin-left: 0.75rem; /* More space */
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            transition: width .6s ease-out; /* Slower transition for a smoother animation */
+            border-radius: 0.4rem; /* Match parent radius */
+        }
+
+        /* Mini Predictions Button (when sidebar is closed) */
+        .mini-predictions-container {
+            position: fixed;
+            bottom: 1.5rem; /* Move up slightly */
+            right: 1.5rem; /* Move in slightly */
+            background-color: var(--sidebar-bg);
+            backdrop-filter: blur(8px);
+            border-radius: 9999px;
+            padding: 0.6rem 1.2rem; /* More padding */
+            display: flex;
+            align-items: center;
+            color: var(--text-color);
+            gap: 0.75rem; /* More gap */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2); /* Stronger shadow */
+            z-index: 90;
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            cursor: pointer;
+            border: 1px solid var(--border-color); /* Add border */
+        }
+
+        .mini-predictions-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(20px);
+        }
+
+        .mini-predictions-container #openPredictionsButton {
+            background-color: var(--accent-primary);
+            color: white;
+            border-radius: 50%;
+            width: 2.5rem; /* Larger button */
+            height: 2.5rem;
+            font-size: 1.1rem;
+            transition: background-color 0.2s, transform 0.2s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        .mini-predictions-container #openPredictionsButton:hover {
+            background-color: var(--accent-secondary);
+            transform: scale(1.05);
+        }
+
+        /* Live Prediction Display */
+        #livePredictionDisplay {
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s ease-in-out;
+            text-align: center;
+            padding: 0.75rem 1.25rem; /* More padding */
+            border-radius: 0.5rem;
+            background-color: var(--message-info-bg); /* Use info message background */
+            color: var(--message-info-color); /* Use info message color */
+            font-weight: 600;
+            width: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            border: 1px solid var(--message-info-border);
+        }
+        .dark #livePredictionDisplay {
+             background-color: var(--message-info-bg);
+             color: var(--message-info-color);
+        }
+
+
+        /* Desktop Layout - Side-by-side */
+        @media (min-width: 768px) {
+            body {
+                padding: 1rem; /* More padding on desktop */
+            }
+            .main-container {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: flex-start;
+                padding: 1.5rem;
+            }
+
+            .main-content {
+                flex: 1;
+                max-width: calc(100% - 350px - 2rem); /* Account for sidebar width + gap, adjust for new max-width */
+                margin-right: 2rem; /* Larger gap */
+            }
+
+            .video-container {
+                height: 50vh; /* Revert to 50vh for desktop */
+                aspect-ratio: 16 / 9; /* Re-add aspect ratio for desktop */
+                max-width: none; /* No max width for video on desktop */
+                min-height: 400px; /* Ensure a decent height */
+            }
+
+            #predictionsSidebar {
+                position: static;
+                width: 350px; /* Slightly wider sidebar on desktop */
+                height: auto;
+                min-height: 500px; /* Consistent height */
+                box-shadow: none;
+                border-left: 1px solid var(--border-color);
+                border-radius: 0;
+                right: auto;
+                transition: none;
+                background: var(--card-bg);
+                backdrop-filter: none;
+            }
+
+            #predictionsSidebar .predictions-header button {
+                display: none;
+            }
+            .mini-predictions-container {
+                display: none !important;
+            }
+            #miniPredictionText {
+                color: var(--text-color);
+                user-select: none;
+                pointer-events: none;
+            }
+            #initialMessage {
+                display: none;
+            }
+            #livePredictionDisplay {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-container">
+        <!-- Main Content Area -->
+        <div class="main-content flex flex-col items-center w-full">
+            <h3 class="font-extrabold mb-2 text-center text-gray-800 dark:text-white text-2xl">AI Classifier</h3>
+            <p id="initialMessage" class="text-sm text-gray-600 dark:text-gray-200 mb-4 text-center">Choose an input source below to get started!</p>
+            <div id="livePredictionDisplay" class="hidden">
+                <!-- Live prediction will appear here -->
+            </div>
+
+            <!-- Mode toggle -->
+            <div class="toggle-bar mb-6">
+                <button id="uploadToggle" class="toggle-btn active"> <i class="fas fa-cloud-upload-alt mr-2"></i> Upload</button>
+                <button id="webcamToggle" class="toggle-btn"><i class="fas fa-video mr-2"></i> Webcam</button>
+            </div>
+
+            <!-- Upload panel -->
+            <div id="uploadArea" class="upload-area w-full mb-6">
+                <i class="fas fa-file-upload text-4xl mb-3"></i>
+                Drop an image here or click to browse
+                <input type="file" id="fileInput" accept="image/*" />
+            </div>
+
+            <!-- Uploaded Image Preview (shown only in Upload mode when an image is loaded) -->
+            <div id="uploadedImagePreviewContainer" class="hidden w-full min-h-[250px] max-h-[60vh] overflow-hidden rounded-lg mb-6 bg-gray-100 dark:bg-gray-700 flex items-center justify-center p-2 border border-gray-200 dark:border-gray-600">
+                <img id="uploadedImageDisplay" class="max-w-full max-h-full object-contain" alt="Uploaded Image Preview" />
+            </div>
+
+            <!-- Webcam panel (initially hidden) -->
+            <div id="webcamArea" class="w-full">
+                <div id="videoContainer" class="video-container">
+                    <video id="cameraFeed" autoplay playsinline></video>
+                    <img id="imagePreview" alt="Captured Frame" style="display:none;" />
+                    <p id="noCameraMessage" class="absolute text-white text-center p-4 hidden bg-black bg-opacity-70 rounded-md">
+                        Camera not available or access denied. Please allow camera permissions.
+                    </p>
+                    <button id="cameraToggleButton" class="button-overlay hidden">
+                        <i class="fas fa-sync-alt"></i> <!-- Icon for camera switch -->
+                    </button>
+                    <button id="takePhotoButton" class="button-overlay">
+                        <i class="fas fa-play"></i> <!-- Play icon initially -->
+                    </button>
+                </div>
+
+                <!-- Zoom Slider (only shown in webcam mode) -->
+                <div id="zoomControls" class="zoom-controls hidden mt-4">
+                    <label for="zoomSlider" class="text-base font-medium mb-2 text-gray-700 dark:text-gray-200">Zoom Level: <span id="zoomValue">1.0</span>x</label>
+                    <input type="range" id="zoomSlider" min="1.0" max="4.0" value="1.0" step="0.1">
+                </div>
+            </div>
+
+            <div id="loading" class="hidden flex flex-col items-center mt-4">
+                <div class="spinner"></div>
+                <p class="text-gray-700 dark:text-gray-200 text-sm">Processing...</p>
+            </div>
+
+            <div id="messageBox" class="message-box hidden"></div>
+        </div>
+
+        <!-- Predictions Sidebar -->
+        <div id="predictionsSidebar" class="predictions-sidebar">
+            <div class="predictions-header">
+                <h3>Top Predictions</h3>
+                <button id="closePredictions">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="predictionsContent" class="predictions-content">
+                <!-- Prediction items will be dynamically inserted here -->
+                <p class="text-gray-500 dark:text-gray-200 text-sm mt-2">Upload an image or start your webcam to see predictions!</p>
+            </div>
+        </div>
+
+        <!-- Mini Predictions Button (when sidebar is closed on mobile) -->
+        <div id="miniPredictions" class="mini-predictions-container hidden">
+            <span id="miniPredictionText" class="text-sm font-semibold"></span>
+            <button id="openPredictionsButton">
+                <i class="fas fa-chart-bar"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const MODEL_CONFIG = {"classes": ["Normal", "Tuberculosis"], "num_classes": 2, "img_size": 224, "input_mean": [0.485, 0.456, 0.406], "input_std": [0.229, 0.224, 0.225], "best_val_accuracy": 99.64285714285714, "model_name": "mobilenet_classifier"};
+        const MODEL_INPUT_NAME = 'input';
+        let session = null;
+        let webcamStream = null;
+        let liveInterval = null; // Interval for continuous prediction
+        let continuousPredictionActive = false; // Flag for continuous prediction state
+        let isSidebarManuallyClosed = false; // New: Tracks if user explicitly closed sidebar
+
+        const $ = id => document.getElementById(id);
+
+        // UI Element References
+        const cameraFeed = $('cameraFeed');
+        const imagePreview = $('imagePreview'); // Used for captured webcam frames
+        const uploadedImageDisplay = $('uploadedImageDisplay'); // Used for uploaded image preview
+        const uploadedImagePreviewContainer = $('uploadedImagePreviewContainer'); // Container for uploaded image
+        const zoomSlider = $('zoomSlider');
+        const zoomValueSpan = $('zoomValue');
+        const noCameraMessage = $('noCameraMessage');
+        const messageBox = $('messageBox');
+        const videoContainer = $('videoContainer');
+        const cameraToggleButton = $('cameraToggleButton');
+        const takePhotoButton = $('takePhotoButton'); // Renamed from startStopButton
+        const uploadToggle = $('uploadToggle');
+        const webcamToggle = $('webcamToggle');
+        const uploadArea = $('uploadArea');
+        const webcamArea = $('webcamArea');
+        const fileInput = $('fileInput');
+        const loadingSpinner = $('loading');
+        const predictionsSidebar = $('predictionsSidebar');
+        const predictionsContent = $('predictionsContent');
+        const closePredictionsButton = $('closePredictions');
+        const zoomControls = $('zoomControls');
+        const miniPredictions = $('miniPredictions'); // New: Mini predictions container
+        const miniPredictionText = $('miniPredictionText'); // New: Text for mini predictions
+        const openPredictionsButton = $('openPredictionsButton'); // New: Button to open sidebar from mini view
+        const initialMessage = $('initialMessage'); // Reference to the initial message paragraph
+        const livePredictionDisplay = $('livePredictionDisplay'); // New: Live prediction display element
+
+
+        let currentZoom = 1.0;
+        const MIN_ZOOM = 1.0;
+        const MAX_ZOOM = 4.0;
+        let isFrontCamera = false; // Tracks current camera facing mode
+
+        // For pinch-to-zoom
+        let initialPinchDistance = -1;
+        let lastZoom = MIN_ZOOM;
+
+        /* --- Helpers --- */
+        function isMobileDevice() {
+            return (
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                (navigator.maxTouchPoints > 0 && navigator.userAgent.includes("Mobi"))
+            );
+        }
+
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.className = `message-box ${type}`;
+            messageBox.style.display = 'block';
+            setTimeout(() => messageBox.style.display = 'none', 4000);
+        }
+
+        function applyZoom(zoomLevel) {
+            currentZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel));
+            cameraFeed.style.transform = `scale(${currentZoom})`;
+            zoomSlider.value = currentZoom.toFixed(1);
+            zoomValueSpan.textContent = currentZoom.toFixed(1);
+        }
+
+        function showPredictionsSidebar(force = false) { // Added force flag
+            if (!isSidebarManuallyClosed || force) { // Only open if not manually closed OR forced (e.g., new prediction)
+                predictionsSidebar.classList.add('open');
+                miniPredictions.classList.add('hidden'); // Hide mini button when sidebar is open
+            }
+            updateClosedSidebarDisplay(); // Always update to ensure correct state
+        }
+
+        function hidePredictionsSidebar() {
+            predictionsSidebar.classList.remove('open');
+            isSidebarManuallyClosed = true; // Mark as manually closed
+            updateClosedSidebarDisplay(); // Show the mini display
+        }
+
+        // Updates the visibility and content of the mini prediction button and live prediction display
+        function updateClosedSidebarDisplay() {
+            // Only show mini-predictions if sidebar is closed AND there are actual predictions to display
+            // AND only on mobile
+            if (!predictionsSidebar.classList.contains('open') && predictionsContent.children.length > 0 && isMobileDevice()) {
+                miniPredictions.classList.remove('hidden');
+                livePredictionDisplay.classList.add('hidden');
+            } else {
+                miniPredictions.classList.add('hidden');
+                livePredictionDisplay.classList.remove('hidden');
+            }
+
+            // Manage livePredictionDisplay visibility based on continuous mode and sidebar state
+            if (continuousPredictionActive && !predictionsSidebar.classList.contains('open') && isMobileDevice()) { // Only show on mobile
+                livePredictionDisplay.classList.add('hidden');
+                initialMessage.classList.add('hidden'); // Hide initial message
+            } else {
+                livePredictionDisplay.classList.remove('hidden');
+                // Show initial message only if no live prediction is active AND (not on mobile OR camera is stopped/not started)
+                if (!continuousPredictionActive && (!webcamStream || !predictionsContent.children.length || !isMobileDevice())) {
+                    initialMessage.classList.remove('hidden');
+                } else if (isMobileDevice() && webcamStream && !continuousPredictionActive) {
+                    // if webcam is showing static image (i.e. not continuous prediction), hide initial message
+                    initialMessage.classList.add('hidden');
+                } else {
+                    initialMessage.classList.add('hidden'); // Default to hidden if live display is shown or not applicable
+                }
+            }
+        }
+
+        /* --- Model & Prediction --- */
+        async function initModel() {
+            try {
+                session = await ort.InferenceSession.create('./mobilenet_classifier.onnx', {
+                    executionProviders: ['wasm']
+                });
+                showMessage('Model ready!', 'success');
+            } catch (e) {
+                showMessage('Model error: ' + e.message, 'error');
+            }
+        }
+
+        function preprocess(src) {
+            const { input_mean, input_std, img_size } = MODEL_CONFIG;
+            const cvs = document.createElement('canvas');
+            cvs.width = cvs.height = img_size;
+            const ctx = cvs.getContext('2d');
+            ctx.drawImage(src, 0, 0, img_size, img_size);
+            const d = ctx.getImageData(0, 0, img_size, img_size).data;
+            const t = new Float32Array(3 * img_size * img_size);
+            for (let i = 0; i < img_size * img_size; i++) {
+                t[i] = (d[i * 4] / 255 - input_mean[0]) / input_std[0];
+                t[img_size * img_size + i] = (d[i * 4 + 1] / 255 - input_mean[1]) / input_std[1];
+                t[2 * img_size * img_size + i] = (d[i * 4 + 2] / 255 - input_mean[2]) / input_std[2];
+            }
+            return t;
+        }
+
+        async function predict(src, forceSidebarOpen = true) { // Default to true for explicit captures/uploads
+            if (!session) {
+                showMessage('Model not ready', 'info');
+                return;
+            }
+            loadingSpinner.style.display = 'flex'; // Show spinner
+
+            try {
+                const data = preprocess(src);
+                const tensor = new ort.Tensor('float32', data, [1, 3, 224, 224]);
+                const outMap = await session.run({ [MODEL_INPUT_NAME]: tensor });
+                const logits = Array.from(outMap[Object.keys(outMap)[0]].data);
+                const max = Math.max(...logits);
+                const probs = logits.map(l => Math.exp(l - max));
+                const sum = probs.reduce((a, b) => a + b, 0);
+                const results = probs.map((p, i) => ({
+                    class: MODEL_CONFIG.classes[i],
+                    confidence: p / sum
+                })).sort((a, b) => b.confidence - a.confidence);
+                displayResults(results);
+                showPredictionsSidebar(forceSidebarOpen); // Show sidebar with new results, respecting force flag
+            } catch (e) {
+                showMessage('Prediction failed: ' + e.message, 'error');
+            } finally {
+                loadingSpinner.style.display = 'none'; // Hide spinner
+            }
+        }
+
+        function displayResults(res) {
+            predictionsContent.innerHTML = ''; // Clear previous results
+            res.slice(0, 5).forEach((r, i) => { // Added index 'i'
+                const pct = (r.confidence * 100).toFixed(1);
+
+                const predictionItem = document.createElement('div');
+                predictionItem.className = 'prediction-item';
+
+                const classNameSpan = document.createElement('span');
+                classNameSpan.textContent = r.class;
+
+                const predictionDetailsDiv = document.createElement('div');
+                predictionDetailsDiv.className = 'prediction-details';
+
+                const percentageSpan = document.createElement('span');
+                percentageSpan.textContent = `${pct}%`;
+
+                const confidenceBarDiv = document.createElement('div');
+                confidenceBarDiv.className = 'confidence-bar';
+
+                const confidenceFillDiv = document.createElement('div');
+                confidenceFillDiv.className = 'confidence-fill';
+                confidenceFillDiv.style.width = `${pct}%`;
+
+                confidenceBarDiv.appendChild(confidenceFillDiv);
+                predictionDetailsDiv.appendChild(percentageSpan);
+                predictionDetailsDiv.appendChild(confidenceBarDiv);
+
+                predictionItem.appendChild(classNameSpan);
+                predictionItem.appendChild(predictionDetailsDiv);
+
+                predictionsContent.appendChild(predictionItem);
+            });
+
+            // Update mini prediction display
+            const topPrediction = res[0];
+            if (topPrediction) {
+                miniPredictionText.textContent = `${topPrediction.class} ${topPrediction.confidence * 100 > 0.1 ? (topPrediction.confidence * 100).toFixed(1) : '<0.1'}%`;
+                livePredictionDisplay.textContent = `${topPrediction.class} (${(topPrediction.confidence * 100).toFixed(1)}%)`; // Removed "Live:"
+            } else {
+                miniPredictionText.textContent = 'No predictions.';
+                livePredictionDisplay.textContent = 'No live prediction.';
+            }
+            updateClosedSidebarDisplay(); // Ensure mini button and live display visibility is managed
+        }
+
+        /* --- Webcam Logic --- */
+        async function startWebcam() {
+            if (webcamStream) { // Stop existing stream if any
+                stopWebcam();
+            }
+
+            // Temporarily disable button to prevent multiple clicks while camera is starting
+            takePhotoButton.disabled = true;
+
+            const videoConstraints = {
+                facingMode: isFrontCamera ? 'user' : 'environment'
+            };
+
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+                cameraFeed.srcObject = webcamStream;
+                cameraFeed.style.display = 'block'; // Show live video
+                imagePreview.style.display = 'none'; // Hide static image
+                noCameraMessage.classList.add('hidden'); // Hide "no camera" message
+                cameraToggleButton.classList.remove('hidden'); // Show toggle button
+                applyZoom(MIN_ZOOM); // Reset zoom to 1x and apply
+                zoomControls.classList.remove('hidden'); // Show zoom slider
+
+                const cameraName = isFrontCamera ? 'Front Camera' : 'Back Camera';
+                showMessage(`${cameraName} started! Continuous prediction active.`, 'success');
+
+                isSidebarManuallyClosed = false; // Reset sidebar state when starting camera
+                startContinuousPrediction(); // Start continuous prediction by default
+                initialMessage.classList.add('hidden'); // Hide initial message when camera starts
+
+            } catch (err) {
+                console.error('Error accessing camera: ', err);
+                cameraFeed.style.display = 'none';
+                imagePreview.style.display = 'none';
+                noCameraMessage.classList.remove('hidden'); // Show "no camera" message
+                let errorMessage = 'Failed to start camera. ';
+                if (err.name === 'NotAllowedError') {
+                    errorMessage += 'Permission denied by user.';
+                } else if (err.name === 'NotFoundError') {
+                    errorMessage += 'No camera found.';
+                } else if (err.name === 'OverconstrainedError') {
+                    errorMessage += 'The requested camera (front/back) is not available or its constraints cannot be met. Try toggling.';
+                } else {
+                    errorMessage += 'Please ensure camera permissions are granted and no other app is using the camera.';
+                }
+                showMessage(errorMessage, 'error');
+                cameraToggleButton.classList.add('hidden'); // Hide toggle if camera fails
+                zoomControls.classList.add('hidden'); // Hide zoom slider
+                stopContinuousPrediction(); // Ensure continuous prediction is stopped on error
+                hidePredictionsSidebar(); // Ensure sidebar is hidden on camera error
+                initialMessage.classList.remove('hidden'); // Show initial message on camera error
+            } finally {
+                takePhotoButton.disabled = false; // Always re-enable the button
+            }
+        }
+
+        function stopWebcam() {
+            stopContinuousPrediction(); // Stop continuous prediction
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+            cameraFeed.srcObject = null;
+            cameraFeed.style.display = 'none'; // Hide video
+            imagePreview.style.display = 'none'; // Hide any static image
+            noCameraMessage.classList.remove('hidden'); // Show message
+            noCameraMessage.textContent = 'Camera stopped. Press the Play button to start.'; // Update message
+            cameraToggleButton.classList.add('hidden'); // Hide camera toggle
+            zoomControls.classList.add('hidden'); // Hide zoom slider
+            applyZoom(MIN_ZOOM); // Reset zoom
+            hidePredictionsSidebar(); // Hide predictions and mini button
+            isSidebarManuallyClosed = false; // Reset manual close state for next camera start
+
+            takePhotoButton.innerHTML = '<i class="fas fa-play"></i>'; // Reset button to play
+            takePhotoButton.classList.remove('stop-continuous'); // Ensure no red background
+            takePhotoButton.disabled = false; // Ensure button is enabled
+            showMessage('Camera stopped.', 'info');
+            initialMessage.classList.remove('hidden'); // Show initial message
+        }
+
+        async function switchCamera() {
+            isFrontCamera = !isFrontCamera; // Toggle camera state
+            await startWebcam(); // Restart camera with new facing mode
+        }
+
+        function captureFrameForPrediction() {
+            // Create a temporary canvas to draw the current video frame
+            const v = cameraFeed;
+            if (!v.videoWidth || !v.videoHeight) {
+                showMessage('Video stream not ready for capture.', 'error');
+                return;
+            }
+            const cvs = document.createElement('canvas');
+            cvs.width = v.videoWidth;
+            cvs.height = v.videoHeight;
+
+            // Calculate source rectangle for zoomed-in portion
+            const sx = (v.videoWidth - (v.videoWidth / currentZoom)) / 2;
+            const sy = (v.videoHeight - (v.videoHeight / currentZoom)) / 2;
+            const sWidth = v.videoWidth / currentZoom;
+            const sHeight = v.videoHeight / currentZoom;
+
+            // Draw the zoomed portion onto the canvas
+            cvs.getContext('2d').drawImage(v, sx, sy, sWidth, sHeight, 0, 0, cvs.width, cvs.height);
+
+            // Create a NEW Image object for this specific prediction
+            const imgForPrediction = new Image();
+            imgForPrediction.onload = () => {
+                // Update the visible image preview
+                imagePreview.src = imgForPrediction.src;
+                imagePreview.style.display = 'block';
+                cameraFeed.style.display = 'none';
+
+                isSidebarManuallyClosed = false; // A new capture should open the sidebar
+                predict(imgForPrediction, true); // Predict using the NEW Image object, force sidebar open
+                showMessage('Photo captured! Displaying predictions.', 'info');
+            };
+            imgForPrediction.src = cvs.toDataURL('image/jpeg');
+        }
+
+        function startContinuousPrediction() {
+            if (liveInterval) clearInterval(liveInterval); // Clear any old interval
+            liveInterval = setInterval(() => {
+                if (cameraFeed.readyState === cameraFeed.HAVE_ENOUGH_DATA) { // Ensure video is ready
+                    const cvs = document.createElement('canvas');
+                    cvs.width = cameraFeed.videoWidth;
+                    cvs.height = cameraFeed.videoHeight;
+
+                    // Calculate source rectangle for zoomed-in portion
+                    const sx = (cameraFeed.videoWidth - (cameraFeed.videoWidth / currentZoom)) / 2;
+                    const sy = (cameraFeed.videoHeight - (cameraFeed.videoHeight / currentZoom)) / 2;
+                    const sWidth = cameraFeed.videoWidth / currentZoom;
+                    const sHeight = cameraFeed.videoHeight / currentZoom;
+
+                    // Draw the zoomed portion onto the canvas
+                    cvs.getContext('2d').drawImage(cameraFeed, sx, sy, sWidth, sHeight, 0, 0, cvs.width, cvs.height);
+
+                    const img = new Image();
+                    img.onload = () => predict(img, false); // Pass false to indicate continuous mode prediction (don't force sidebar open)
+                    img.src = cvs.toDataURL('image/jpeg');
+                }
+            }, 100); // Predict every 0.1 seconds for continuous mode
+            continuousPredictionActive = true;
+            cameraFeed.style.display = 'block'; // Ensure live video is shown when continuous starts
+            imagePreview.style.display = 'none'; // Hide static image if resuming continuous
+            takePhotoButton.innerHTML = '<i class="fas fa-pause"></i>'; // Change icon to pause continuous
+            takePhotoButton.classList.add('stop-continuous'); // Style as 'stop' button
+            showMessage('Continuous prediction started.', 'success');
+            livePredictionDisplay.classList.remove('hidden'); // Show live prediction display
+            initialMessage.classList.add('hidden'); // Hide initial message
+        }
+
+        function stopContinuousPrediction() {
+            if (liveInterval) {
+                clearInterval(liveInterval);
+                liveInterval = null;
+            }
+            continuousPredictionActive = false;
+            if (webcamStream) { // Only change button if camera is still active
+                takePhotoButton.innerHTML = '<i class="fas fa-camera"></i>'; // Change icon to take photo
+                takePhotoButton.classList.remove('stop-continuous'); // Reset button style
+            }
+            showMessage('Continuous prediction paused.', 'info');
+            livePredictionDisplay.classList.add('hidden'); // Hide live prediction display
+            updateClosedSidebarDisplay(); // Ensure mini button / initial message is correct after stopping continuous
+        }
+
+        /* --- UI Mode Switch --- */
+        function setMode(mode) {
+            uploadToggle.classList.remove('active');
+            webcamToggle.classList.remove('active');
+            uploadArea.style.display = 'none';
+            webcamArea.style.display = 'none';
+            imagePreview.style.display = 'none'; // Hide webcam preview image
+            uploadedImagePreviewContainer.classList.add('hidden'); // Hide uploaded image preview
+            hidePredictionsSidebar(); // Hide any existing predictions and mini button
+            isSidebarManuallyClosed = false; // Reset manual close state on mode switch
+
+            livePredictionDisplay.classList.add('hidden'); // Hide live prediction display
+            initialMessage.classList.remove('hidden'); // Show initial message by default
+
+            if (mode === 'upload') {
+                uploadToggle.classList.add('active');
+                uploadArea.style.display = 'flex'; // Use flex for centering content
+                stopWebcam(); // Ensure webcam is stopped when switching to upload
+                // The uploadedImagePreviewContainer will be shown by handleFile
+            } else { // mode === 'webcam'
+                webcamToggle.classList.add('active');
+                webcamArea.style.display = 'block';
+                // The webcam starts upon activating this mode via startWebcam() call
+                startWebcam(); // This will handle showing camera feed and initial messages
+            }
+        }
+
+        /* --- Event Wiring --- */
+        window.addEventListener('DOMContentLoaded', () => {
+            // Set dark mode as default
+            document.documentElement.classList.add('dark');
+
+            initModel(); // Initialize ONNX model
+
+            // Mode toggles
+            uploadToggle.addEventListener('click', () => setMode('upload'));
+            webcamToggle.addEventListener('click', () => setMode('webcam'));
+
+            // Upload functionality
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+            ['dragover', 'dragleave', 'drop'].forEach(evt => {
+                uploadArea.addEventListener(evt, e => {
+                    e.preventDefault();
+                    uploadArea.classList.toggle('dragover', evt === 'dragover');
+                    if (evt === 'drop' && e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+                });
+            });
+
+            // Webcam controls
+            cameraToggleButton.addEventListener('click', switchCamera);
+            takePhotoButton.addEventListener('click', () => {
+                if (!webcamStream) { // State: Camera OFF (Play icon)
+                    startWebcam(); // This starts continuous prediction
+                } else { // State: Camera ON (Pause or Camera icon)
+                    if (continuousPredictionActive) { // State: Continuous LIVE (Pause icon)
+                        // User wants to pause continuous and capture a single frame
+                        stopContinuousPrediction(); // This will change button to fa-camera
+                        captureFrameForPrediction(); // Capture and predict
+                    } else { // State: Continuous PAUSED/FROZEN (Camera icon)
+                        // User wants to resume continuous live prediction
+                        startContinuousPrediction(); // This will change button to fa-pause
+                        hidePredictionsSidebar(); // Hide sidebar when returning to continuous
+                    }
+                }
+            });
+
+
+            // Zoom slider
+            zoomSlider.addEventListener('input', (event) => {
+                const zoomLevel = parseFloat(event.target.value);
+                applyZoom(zoomLevel);
+            });
+
+            // Pinch-to-zoom logic (only for mobile devices)
+            if (isMobileDevice()) {
+                videoContainer.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 2) {
+                        initialPinchDistance = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY
+                        );
+                        lastZoom = currentZoom; // Store current zoom to base relative changes
+                        e.preventDefault(); // Prevent default browser gestures like page zoom
+                    }
+                });
+
+                videoContainer.addEventListener('touchmove', (e) => {
+                    if (e.touches.length === 2 && initialPinchDistance > 0) {
+                        const currentPinchDistance = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY
+                        );
+
+                        const scaleFactor = currentPinchDistance / initialPinchDistance;
+                        let newZoom = lastZoom * scaleFactor;
+
+                        applyZoom(newZoom);
+                        e.preventDefault(); // Prevent default browser gestures
+                    }
+                });
+
+                videoContainer.addEventListener('touchend', () => {
+                    initialPinchDistance = -1; // Reset pinch state
+                });
+                videoContainer.addEventListener('touchcancel', () => { // Handle cases where touch is interrupted
+                    initialPinchDistance = -1;
+                });
+            }
+
+            // Close predictions sidebar
+            closePredictionsButton.addEventListener('click', hidePredictionsSidebar);
+            // Open predictions sidebar from mini button
+            openPredictionsButton.addEventListener('click', () => {
+                isSidebarManuallyClosed = false; // Reset manual close flag
+                showPredictionsSidebar(true); // Force sidebar open
+            });
+
+
+            // Default mode on load
+            setMode('upload');
+        });
+
+        /* --- File Handling for Upload Mode --- */
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage('Please choose an image file (e.g., JPG, PNG).', 'error');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    uploadedImageDisplay.src = e.target.result; // Set new image
+                    uploadedImagePreviewContainer.classList.remove('hidden'); // Show container
+
+                    // Ensure no other preview elements are showing if coming from webcam mode
+                    imagePreview.style.display = 'none';
+                    cameraFeed.style.display = 'none';
+
+                    isSidebarManuallyClosed = false; // A new upload should open the sidebar
+                    predict(img, true); // Run prediction, force sidebar open
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>
